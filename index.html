@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BinaryPracticer.exe</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #000;
+      color: #00bfff;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 191, 255, 0.5);
+    }
+    h1 {
+      text-align: center;
+    }
+    .control-group {
+      margin: 20px 0;
+      text-align: center;
+    }
+    .binary-display {
+      font-family: monospace;
+      font-size: 1.4em;
+      margin: 20px 0;
+      padding: 15px;
+      background: #111;
+      border: 2px solid #00bfff;
+      border-radius: 8px;
+    }
+    input[type="range"] {
+      width: 300px;
+    }
+    #userAnswer {
+      font-family: monospace;
+      font-size: 1.2em;
+      width: 220px;
+      padding: 8px;
+      border: 2px solid #00bfff;
+      border-radius: 5px;
+      background: #222;
+      color: #00bfff;
+    }
+    button {
+      padding: 10px 20px;
+      background: #00bfff;
+      color: #000;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #009acd;
+    }
+    #feedback {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #444;
+      transition: .4s;
+      border-radius: 34px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: #00bfff;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #00bfff;
+    }
+    input:checked + .slider:before {
+      transform: translateX(26px);
+      background-color: #000;
+    }
+  </style>
+</head>
+<body>
+  <h1>Binary Arithmetic Challenge</h1>
+  
+  <div class="control-group">
+    <label>Number Range: 1 to <span id="rangeValue">5000</span></label><br>
+    <input type="range" id="range" min="1" max="10000" value="5000">
+  </div>
+  
+  <div class="control-group">
+    <button onclick="generateNewNumbers()">Generate New Numbers</button>
+  </div>
+  
+  <div class="control-group">
+    <label class="switch">
+      <input type="checkbox" id="operationToggle">
+      <span class="slider"></span>
+    </label>
+    <span id="operationLabel">Addition</span>
+  </div>
+  
+  <div class="binary-display">
+    <div id="num1Binary"></div>
+    <div id="num2Binary"></div>
+  </div>
+  
+  <div class="control-group">
+    <input type="text" id="userAnswer" placeholder="Enter binary answer">
+    <button onclick="checkAnswer()">Check Answer</button>
+  </div>
+  
+  <div id="feedback"></div>
+
+  <script>
+    let currentNum1, currentNum2, correctAnswer, correctAnswerBinary;
+
+    function generateNewNumbers() {
+      // Use range slider value as max
+      const max = parseInt(document.getElementById('range').value);
+      const isSubtract = document.getElementById('operationToggle').checked;
+      
+      // Generate numbers based on operation
+      if (isSubtract) {
+        // Ensure currentNum1 > currentNum2
+        currentNum1 = Math.floor(Math.random() * (max - 1)) + 2;
+        currentNum2 = Math.floor(Math.random() * (currentNum1 - 1)) + 1;
+      } else {
+        currentNum1 = Math.floor(Math.random() * max) + 1;
+        currentNum2 = Math.floor(Math.random() * max) + 1;
+      }
+      
+      // Display binary numbers without unnecessary zeros
+      document.getElementById('num1Binary').textContent = currentNum1.toString(2);
+      document.getElementById('num2Binary').textContent = currentNum2.toString(2);
+      
+      // Calculate correct answer and its binary representation
+      correctAnswer = isSubtract ? currentNum1 - currentNum2 : currentNum1 + currentNum2;
+      correctAnswerBinary = correctAnswer.toString(2);
+      
+      // Reset answer input and feedback
+      document.getElementById('userAnswer').value = "";
+      document.getElementById('feedback').textContent = "";
+    }
+    
+    function checkAnswer() {
+      const userInput = document.getElementById('userAnswer').value.trim();
+      const feedback = document.getElementById('feedback');
+      
+      if (!/^[01]+$/.test(userInput)) {
+        feedback.textContent = "Invalid binary input! Use only 0s and 1s.";
+        feedback.style.color = 'red';
+        return;
+      }
+      
+      if (userInput === correctAnswerBinary) {
+        feedback.textContent = "Correct! Well done!";
+        feedback.style.color = 'green';
+        // Wait 0.5 seconds then generate new numbers
+        setTimeout(generateNewNumbers, 500);
+      } else {
+        feedback.textContent = `Incorrect. Correct answer: ${correctAnswerBinary} (${correctAnswer} in decimal)`;
+        feedback.style.color = 'red';
+      }
+    }
+    
+    // Update displayed range value and generate new numbers when slider is moved
+    document.getElementById('range').addEventListener('input', function() {
+      document.getElementById('rangeValue').textContent = this.value;
+      generateNewNumbers();
+    });
+    
+    // Update operation label and generate new numbers when toggled
+    document.getElementById('operationToggle').addEventListener('change', function() {
+      document.getElementById('operationLabel').textContent = this.checked ? 'Subtraction' : 'Addition';
+      generateNewNumbers();
+    });
+
+    // Initial setup
+    generateNewNumbers();
+  </script>
+</body>
+</html>
