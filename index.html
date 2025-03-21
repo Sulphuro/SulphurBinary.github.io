@@ -57,8 +57,7 @@
     #lampsContainer {
       display: flex;
       justify-content: center;
-      /* default behavior: if layeredLayout is off, we'll keep them on one row;
-         if on, the container will wrap naturally */
+      /* if layeredLayout is off, keep them in one row; if on, allow wrapping */
       flex-wrap: nowrap;
       margin: 0 auto;
     }
@@ -165,16 +164,16 @@
     
     let lamps = []; // Array of lamp container elements.
     let numLamps = 8;
-    // Save separate lamp counts for binary and BCD modes.
+    // Separate lamp counts for binary and BCD modes.
     let binaryLampCount = 8;
     let bcdLampCount = 8; // In BCD mode, must be a multiple of 4.
     let isBCD = false; // false = binary mode, true = BCD mode.
     
     // Global settings.
     let lampScale = 100;   // in pixels
-    let savedLampScale = lampScale; // store user's custom scale when not in layered layout
+    let savedLampScale = lampScale; // to store user's custom scale when not in layered layout
     let bcdSpacing = 10;   // spacing (in pixels) between each nibble group in BCD mode
-    let layeredLayout = false;  // false = scale down to fit one row, true = fixed size and wrap to next layer
+    let layeredLayout = false;  // false = fit in one row, true = fixed size with wrapping
     
     const container = document.getElementById("lampsContainer");
     const lampCountInput = document.getElementById("lampCountInput");
@@ -189,23 +188,10 @@
     
     let isMouseDown = false;
     
-    // Returns the current decimal value based on the lamp states.
-    function getCurrentDecimal() {
-      let binaryStr = "";
-      lamps.forEach(lamp => {
-        binaryStr += (lamp.dataset.state === "on") ? "1" : "0";
-      });
-      if (isBCD) {
-        let result = "";
-        for (let i = 0; i < binaryStr.length; i += 4) {
-          let nibble = binaryStr.substr(i, 4);
-          let digit = parseInt(nibble, 2);
-          result += digit.toString();
-        }
-        return parseInt(result, 10) || 0;
-      } else {
-        return parseInt(binaryStr, 2) || 0;
-      }
+    // Helper: convert a single decimal digit to a 4-bit binary string.
+    function digitToBCD(digit) {
+      let bin = Number(digit).toString(2);
+      return bin.padStart(4, "0");
     }
     
     // Toggle the lamp's state.
@@ -222,13 +208,11 @@
       }
     }
     
-    // Create lamps based on the current count.
+    // Create all lamp elements.
     function createLamps(count) {
       numLamps = count;
       lamps = [];
-      container.innerHTML = ""; // Clear existing lamps.
-      
-      // Set layout wrapping.
+      container.innerHTML = "";
       container.style.flexWrap = layeredLayout ? "wrap" : "nowrap";
       
       for (let i = 0; i < numLamps; i++) {
@@ -237,25 +221,23 @@
         lampContainer.dataset.state = "off";
         lampContainer.dataset.dragToggled = "false";
         
-        // In BCD mode, add extra spacing every 4 lamps (except the first).
+        // In BCD mode, add extra left margin every 4 lamps (except the first).
         if (isBCD && i % 4 === 0 && i !== 0) {
           lampContainer.style.marginLeft = bcdSpacing + "px";
         } else {
           lampContainer.style.marginLeft = "0";
         }
         
-        // Create the lamp image.
         const img = document.createElement("img");
         img.src = offImage;
         img.className = "lamp";
         lampContainer.appendChild(img);
         
-        // Create the glow element.
         const glowDiv = document.createElement("div");
         glowDiv.className = "glow";
         lampContainer.appendChild(glowDiv);
         
-        // Mouse events for toggling.
+        // Mouse events for manual toggling.
         lampContainer.addEventListener("mousedown", function(e) {
           if (e.button !== 0) return;
           isMouseDown = true;
@@ -283,7 +265,7 @@
       updateNumber();
     }
     
-    // Update lamp size based on settings and layout mode.
+    // Update lamp sizes based on the chosen scale and layout.
     function updateLampStyles() {
       if (!layeredLayout) {
         const containerWidth = container.clientWidth;
@@ -291,85 +273,114 @@
         if (numLamps * lampScale > containerWidth) {
           computedScale = containerWidth / numLamps;
         }
-        lamps.forEach(lampContainer => {
-          lampContainer.style.width = computedScale + "px";
-          lampContainer.style.height = computedScale + "px";
+        lamps.forEach(lamp => {
+          lamp.style.width = computedScale + "px";
+          lamp.style.height = computedScale + "px";
         });
       } else {
-        lamps.forEach(lampContainer => {
-          lampContainer.style.width = lampScale + "px";
-          lampContainer.style.height = lampScale + "px";
+        lamps.forEach(lamp => {
+          lamp.style.width = lampScale + "px";
+          lamp.style.height = lampScale + "px";
         });
       }
     }
     
-    // Update the top number display.
+    // For BCD mode: update display and hide leading groups that represent 0.
+    // In binary mode, simply build the binary string.
     function updateNumber() {
-      let binaryStr = "";
-      lamps.forEach(lamp => {
-        binaryStr += (lamp.dataset.state === "on") ? "1" : "0";
-        lamp.dataset.dragToggled = "false";
-      });
-      
       if (isBCD) {
-        let result = "";
-        for (let i = 0; i < binaryStr.length; i += 4) {
-          let nibble = binaryStr.substr(i, 4);
-          let digit = parseInt(nibble, 2);
-          result += (digit > 9) ? '<span style="color:red">' + digit + '</span>' : '<span>' + digit + '</span>';
+        const totalGroups = numLamps / 4;
+        let groups = [];
+        // Build an array of nibble strings from lamp states.
+        for (let i = 0; i < totalGroups; i++) {
+          let nibble = "";
+          for (let j = 0; j < 4; j++) {
+            const index = i * 4 + j;
+            nibble += (lamps[index].dataset.state === "on") ? "1" : "0";
+            // Ensure hidden groups stay hidden.
+            lamps[index].style.display = "inline-block";
+          }
+          groups.push(nibble);
         }
+        // Remove leading groups that are "0000" (but leave at least one).
+        let hideCount = 0;
+        while (groups.length > 1 && groups[0] === "0000") {
+          groups.shift();
+          hideCount++;
+        }
+        // Hide the lamps in the suppressed groups.
+        for (let i = 0; i < totalGroups; i++) {
+          let groupLamps = lamps.slice(i * 4, i * 4 + 4);
+          if (i < hideCount) {
+            groupLamps.forEach(lamp => lamp.style.display = "none");
+          } else {
+            groupLamps.forEach(lamp => lamp.style.display = "inline-block");
+          }
+        }
+        // Build the number display.
+        let result = "";
+        groups.forEach(nibble => {
+          let digit = parseInt(nibble, 2);
+          result += (digit > 9) ? '<span style="color:red">' + digit + '</span>' 
+                                : '<span>' + digit + '</span>';
+        });
         numberDisplay.innerHTML = result;
       } else {
-        const decimalValue = parseInt(binaryStr, 2);
-        numberDisplay.textContent = decimalValue;
+        let binaryStr = "";
+        lamps.forEach(lamp => {
+          binaryStr += (lamp.dataset.state === "on") ? "1" : "0";
+          lamp.dataset.dragToggled = "false";
+          lamp.style.display = "inline-block";
+        });
+        numberDisplay.textContent = parseInt(binaryStr, 2);
       }
     }
     
-    // Convert a single decimal digit into its 4-bit binary string.
-    function digitToBCD(digit) {
-      let bin = Number(digit).toString(2);
-      return bin.padStart(4, "0");
-    }
-    
-    // Update lamps based on the decimal input.
+    // Update lamp states from the decimal input.
     function updateLampsFromDecimal() {
       let value = parseInt(decimalInput.value, 10);
-      if (isNaN(value) || value < 0) {
-        value = 0;
-      }
-      
+      if (isNaN(value) || value < 0) { value = 0; }
       errorDiv.innerHTML = "";
       
       if (isBCD) {
+        // In BCD mode, only update the groups needed.
         let strVal = value.toString();
-        const maxDigits = numLamps / 4;
-        if (strVal.length > maxDigits) {
-          errorDiv.innerHTML = 'Error: Not enough lamps! You need at least ' + (strVal.length * 4) + ' lamps.<br><button id="increaseLampCountButton">Fix</button>';
-          document.getElementById("increaseLampCountButton").addEventListener("click", function() {
-            lampCountInput.value = strVal.length * 4;
-            createLamps(strVal.length * 4);
-            updateLampsFromDecimal();
-          });
-          return;
-        }
-        strVal = strVal.padStart(maxDigits, "0");
-        let binaryStr = "";
-        for (let char of strVal) {
-          binaryStr += digitToBCD(char);
-        }
-        lamps.forEach((lamp, index) => {
-          const img = lamp.querySelector(".lamp");
-          if (binaryStr[index] === "1") {
-            lamp.dataset.state = "on";
-            img.src = onImage;
-            lamp.classList.add("on");
+        if (value === 0) { strVal = "0"; }
+        const totalGroups = numLamps / 4;
+        const neededDigits = strVal.length;
+        const padAmount = totalGroups - neededDigits;
+        
+        // Loop through each group.
+        for (let group = 0; group < totalGroups; group++) {
+          const groupLamps = lamps.slice(group * 4, group * 4 + 4);
+          if (group < padAmount) {
+            // Hide this group and set off.
+            groupLamps.forEach(lamp => {
+              lamp.style.display = "none";
+              lamp.dataset.state = "off";
+              lamp.querySelector(".lamp").src = offImage;
+              lamp.classList.remove("on");
+            });
           } else {
-            lamp.dataset.state = "off";
-            img.src = offImage;
-            lamp.classList.remove("on");
+            // Show this group.
+            groupLamps.forEach(lamp => lamp.style.display = "inline-block");
+            const digitIndex = group - padAmount;
+            let digit = strVal[digitIndex];
+            let bin = digitToBCD(digit);
+            groupLamps.forEach((lamp, idx) => {
+              const img = lamp.querySelector(".lamp");
+              if (bin[idx] === "1") {
+                lamp.dataset.state = "on";
+                img.src = onImage;
+                lamp.classList.add("on");
+              } else {
+                lamp.dataset.state = "off";
+                img.src = offImage;
+                lamp.classList.remove("on");
+              }
+            });
           }
-          lamp.dataset.dragToggled = "false";
-        });
+        }
         updateNumber();
       } else {
         let binaryStr = value.toString(2);
@@ -400,19 +411,20 @@
       }
     }
     
-    // End drag toggling on mouseup.
+    // End drag toggling.
     document.addEventListener("mouseup", function() {
       isMouseDown = false;
       lamps.forEach(lamp => lamp.dataset.dragToggled = "false");
     });
     
-    // When the lamp count changes, preserve the current value, recreate lamps, then reapply the value.
+    // When the lamp count changes, preserve the current value, recreate lamps, and reapply that value.
     lampCountInput.addEventListener("input", function() {
       let newCount = parseInt(lampCountInput.value, 10);
       if (isNaN(newCount) || newCount < 1) return;
       
-      // Preserve current value from lamps.
-      let currentValue = getCurrentDecimal();
+      // Preserve the current value.
+      let currentValue = (isBCD) ? numberDisplay.textContent.replace(/\D/g, "") : parseInt(numberDisplay.textContent, 10);
+      if (isBCD && !currentValue) { currentValue = 0; }
       
       if (isBCD) {
         newCount = Math.max(4, Math.round(newCount / 4) * 4);
@@ -423,7 +435,6 @@
       }
       
       createLamps(newCount);
-      // Reapply the preserved value.
       decimalInput.value = currentValue;
       updateLampsFromDecimal();
     });
@@ -468,7 +479,7 @@
       updateLampStyles();
     });
     
-    // Change lamp scale.
+    // Update lamp scale.
     lampScaleInput.addEventListener("input", function() {
       let scale = parseInt(lampScaleInput.value, 10);
       if (!isNaN(scale) && scale >= 10) {
@@ -478,7 +489,7 @@
       }
     });
     
-    // Update BCD spacing without resetting lamp states.
+    // Update BCD spacing (only affects margin, not lamp state).
     bcdSpacingInput.addEventListener("input", function() {
       let spacing = parseInt(bcdSpacingInput.value, 10);
       if (!isNaN(spacing) && spacing >= 0) {
@@ -493,7 +504,7 @@
       }
     });
     
-    // Adjust lamp sizes on window resize (if layered layout is off).
+    // Adjust lamp sizes on window resize.
     window.addEventListener("resize", updateLampStyles);
     
     // Initial lamp creation.
