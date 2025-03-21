@@ -170,9 +170,9 @@
     let bcdLampCount = 8; // In BCD mode, must be a multiple of 4.
     let isBCD = false; // false = binary mode, true = BCD mode.
     
-    // New global settings.
+    // Global settings.
     let lampScale = 100;   // in pixels
-    let savedLampScale = lampScale; // to store user's custom scale when not in layered layout
+    let savedLampScale = lampScale; // store user's custom scale when not in layered layout
     let bcdSpacing = 10;   // spacing (in pixels) between each nibble group in BCD mode
     let layeredLayout = false;  // false = scale down to fit one row, true = fixed size and wrap to next layer
     
@@ -188,6 +188,25 @@
     const numberDisplay = document.getElementById("numberDisplay");
     
     let isMouseDown = false;
+    
+    // Returns the current decimal value based on the lamp states.
+    function getCurrentDecimal() {
+      let binaryStr = "";
+      lamps.forEach(lamp => {
+        binaryStr += (lamp.dataset.state === "on") ? "1" : "0";
+      });
+      if (isBCD) {
+        let result = "";
+        for (let i = 0; i < binaryStr.length; i += 4) {
+          let nibble = binaryStr.substr(i, 4);
+          let digit = parseInt(nibble, 2);
+          result += digit.toString();
+        }
+        return parseInt(result, 10) || 0;
+      } else {
+        return parseInt(binaryStr, 2) || 0;
+      }
+    }
     
     // Toggle the lamp's state.
     function toggleLamp(lampContainer) {
@@ -209,18 +228,16 @@
       lamps = [];
       container.innerHTML = ""; // Clear existing lamps.
       
-      // Layout: if layered layout is on, allow wrapping.
+      // Set layout wrapping.
       container.style.flexWrap = layeredLayout ? "wrap" : "nowrap";
       
-      // Always show lamps in one horizontal row in binary mode.
-      // In BCD mode, we visually group by adding extra left margin every 4 lamps.
       for (let i = 0; i < numLamps; i++) {
         const lampContainer = document.createElement("div");
         lampContainer.className = "lamp-container";
         lampContainer.dataset.state = "off";
         lampContainer.dataset.dragToggled = "false";
         
-        // In BCD mode, add extra spacing every 4 lamps (except the first lamp).
+        // In BCD mode, add extra spacing every 4 lamps (except the first).
         if (isBCD && i % 4 === 0 && i !== 0) {
           lampContainer.style.marginLeft = bcdSpacing + "px";
         } else {
@@ -268,7 +285,6 @@
     
     // Update lamp size based on settings and layout mode.
     function updateLampStyles() {
-      // If layered layout is off, scale lamps down if they exceed container width.
       if (!layeredLayout) {
         const containerWidth = container.clientWidth;
         let computedScale = lampScale;
@@ -280,7 +296,6 @@
           lampContainer.style.height = computedScale + "px";
         });
       } else {
-        // Layered: use fixed lampScale.
         lamps.forEach(lampContainer => {
           lampContainer.style.width = lampScale + "px";
           lampContainer.style.height = lampScale + "px";
@@ -301,12 +316,7 @@
         for (let i = 0; i < binaryStr.length; i += 4) {
           let nibble = binaryStr.substr(i, 4);
           let digit = parseInt(nibble, 2);
-          // If digit is greater than 9, wrap it in a red span.
-          if (digit > 9) {
-            result += '<span style="color:red">' + digit + '</span>';
-          } else {
-            result += '<span>' + digit + '</span>';
-          }
+          result += (digit > 9) ? '<span style="color:red">' + digit + '</span>' : '<span>' + digit + '</span>';
         }
         numberDisplay.innerHTML = result;
       } else {
@@ -332,7 +342,6 @@
       
       if (isBCD) {
         let strVal = value.toString();
-        // Maximum number of digits we can display.
         const maxDigits = numLamps / 4;
         if (strVal.length > maxDigits) {
           errorDiv.innerHTML = 'Error: Not enough lamps! You need at least ' + (strVal.length * 4) + ' lamps.<br><button id="increaseLampCountButton">Fix</button>';
@@ -397,21 +406,26 @@
       lamps.forEach(lamp => lamp.dataset.dragToggled = "false");
     });
     
-    // Update lamps when the lamp count input value changes.
+    // When the lamp count changes, preserve the current value, recreate lamps, then reapply the value.
     lampCountInput.addEventListener("input", function() {
       let newCount = parseInt(lampCountInput.value, 10);
       if (isNaN(newCount) || newCount < 1) return;
       
+      // Preserve current value from lamps.
+      let currentValue = getCurrentDecimal();
+      
       if (isBCD) {
-        // In BCD mode, enforce multiples of 4 and a minimum of 4.
         newCount = Math.max(4, Math.round(newCount / 4) * 4);
         lampCountInput.value = newCount;
         bcdLampCount = newCount;
-        createLamps(newCount);
       } else {
         binaryLampCount = newCount;
-        createLamps(newCount);
       }
+      
+      createLamps(newCount);
+      // Reapply the preserved value.
+      decimalInput.value = currentValue;
+      updateLampsFromDecimal();
     });
     
     // Update lamps when the decimal input changes.
@@ -420,16 +434,13 @@
     // Toggle BCD mode.
     bcdToggle.addEventListener("change", function() {
       if (isBCD) {
-        // Switching from BCD to binary.
         bcdLampCount = numLamps;
         numLamps = binaryLampCount;
         lampCountInput.min = 1;
         lampCountInput.step = 1;
         lampCountInput.value = numLamps;
       } else {
-        // Switching to BCD mode.
         binaryLampCount = numLamps;
-        // Force a valid multiple of 4 (minimum 4).
         bcdLampCount = Math.max(4, Math.round(numLamps / 4) * 4);
         numLamps = bcdLampCount;
         lampCountInput.min = 4;
@@ -446,13 +457,10 @@
       layeredLayout = layeredLayoutToggle.checked;
       container.style.flexWrap = layeredLayout ? "wrap" : "nowrap";
       if (layeredLayout) {
-        // Save the current custom lamp scale and force scale to 100px.
         savedLampScale = lampScale;
         lampScale = 100;
-        // Hide the lamp scale option.
         lampScaleContainer.style.display = "none";
       } else {
-        // Restore the previously saved lamp scale.
         lampScale = savedLampScale;
         lampScaleContainer.style.display = "block";
         lampScaleInput.value = savedLampScale;
@@ -465,22 +473,27 @@
       let scale = parseInt(lampScaleInput.value, 10);
       if (!isNaN(scale) && scale >= 10) {
         lampScale = scale;
-        savedLampScale = scale; // Save the user's custom scale
+        savedLampScale = scale;
         updateLampStyles();
       }
     });
     
-    // Change BCD spacing.
+    // Update BCD spacing without resetting lamp states.
     bcdSpacingInput.addEventListener("input", function() {
       let spacing = parseInt(bcdSpacingInput.value, 10);
       if (!isNaN(spacing) && spacing >= 0) {
         bcdSpacing = spacing;
-        // Re-create lamps to update margin spacing.
-        createLamps(numLamps);
+        lamps.forEach((lamp, i) => {
+          if (isBCD && i % 4 === 0 && i !== 0) {
+            lamp.style.marginLeft = bcdSpacing + "px";
+          } else {
+            lamp.style.marginLeft = "0";
+          }
+        });
       }
     });
     
-    // Adjust lamp sizes on window resize (only matters if layered layout is off).
+    // Adjust lamp sizes on window resize (if layered layout is off).
     window.addEventListener("resize", updateLampStyles);
     
     // Initial lamp creation.
